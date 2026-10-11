@@ -17,7 +17,7 @@ export interface SundayBrief {
   themeClusters: ThemeCluster[];
 }
 
-const DEFAULT_MODEL = "gemini-2.5-flash";
+const DEFAULT_MODEL = "gemini-3.5-flash";
 const MAX_DESCRIPTION_CHARS = 150;
 
 const BRIEF_SCHEMA = {

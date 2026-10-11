@@ -88,7 +88,7 @@ A Next.js App Router `POST` handler that orchestrates the pipeline.
 
 ### `lib/gemini.ts`: Gemini analysis
 
-- `generateSundayBrief(videos)` uses the Google Gen AI SDK with `process.env.GEMINI_MODEL || 'gemini-2.5-flash'`.
+- `generateSundayBrief(videos)` uses the Google Gen AI SDK with `process.env.GEMINI_MODEL || 'gemini-3.5-flash'`.
 - Requests structured JSON output matching the `SundayBrief` schema: `executiveSummary`, `winningFormats`, `durationSweetSpot` and 3 to 5 `themeClusters` (`clusterName`, `videoCount`, `whyItIsTrending`, `suggestedVideoTitle`, `angleOrHook`, `recommendedDuration`).
 - Validates the response and falls back to a heuristic brief built from the video data if the call or the validation fails.
 
@@ -113,7 +113,7 @@ A Next.js App Router `POST` handler that orchestrates the pipeline.
 | --- | --- |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key (server only) |
 | `GEMINI_API_KEY` | Google Gen AI key (server only) |
-| `GEMINI_MODEL` | Optional model override (default `gemini-2.5-flash`) |
+| `GEMINI_MODEL` | Optional model override (default `gemini-3.5-flash`) |
 | `NEXT_PUBLIC_USE_MOCK_DATA` | Set to `true` to force the sample dataset |
 
 ## Running Locally
