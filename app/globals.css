@@ -128,40 +128,24 @@
     @apply font-sans;
   }
 }
-/* ---------- Trend Radar: funky agency theme ---------- */
+/* ---------- Trend Radar: malachite / razzmatazz / heliotrope theme ---------- */
 .font-display {
   font-family: var(--font-display), system-ui, sans-serif;
 }
 .font-body {
-  font-family: var(--font-body), system-ui, sans-serif;
+  font-family: var(--font-display), system-ui, sans-serif;
+}
+.font-label {
+  font-family: var(--font-label), ui-monospace, monospace;
 }
 
-.chrome-text {
-  background: linear-gradient(
-    180deg,
-    #ffffff 0%,
-    #d6d9e4 38%,
-    #8a90a3 52%,
-    #f1f3fa 70%,
-    #b4b9c9 100%
+.ring-bg {
+  background-color: #31ec56;
+  background-image: repeating-radial-gradient(
+    circle at 82% 14%,
+    #31ec56 0 58px,
+    #62f27f 58px 116px
   );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.chrome-bg {
-  background: linear-gradient(135deg, #f5f6fb 0%, #b9bdcc 35%, #7d8294 50%, #e4e7f1 75%, #a8adbf 100%);
-}
-
-.grid-bg {
-  background-color: #07050d;
-  background-image:
-    radial-gradient(60rem 30rem at 85% -10%, rgba(139, 45, 255, 0.35), transparent 60%),
-    radial-gradient(40rem 25rem at -10% 40%, rgba(57, 255, 20, 0.12), transparent 60%),
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: auto, auto, 36px 36px, 36px 36px;
 }
 
 @keyframes marquee {
@@ -171,17 +155,9 @@
 .marquee-track {
   display: flex;
   width: max-content;
-  animation: marquee 28s linear infinite;
-}
-
-@keyframes wobble {
-  0%, 100% { transform: rotate(-3deg); }
-  50% { transform: rotate(3deg); }
-}
-.wobble {
-  animation: wobble 4s ease-in-out infinite;
+  animation: marquee 30s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track, .wobble { animation: none; }
+  .marquee-track { animation: none; }
 }

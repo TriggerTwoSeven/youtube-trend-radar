@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { Unbounded, Space_Grotesk } from "next/font/google";
+import { Poppins, Space_Mono } from "next/font/google";
 import "./globals.css";
 
-// Thick, wide display face for headlines and numbers.
-const display = Unbounded({
+// Heavy geometric sans for headlines; light weights for body copy.
+const display = Poppins({
   variable: "--font-display",
   subsets: ["latin"],
-  weight: ["400", "700", "900"],
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
 });
 
-// Light, clean grotesk for body copy: contrasts with the heavy display face.
-const body = Space_Grotesk({
-  variable: "--font-body",
+// Monospace for the black label strips and small caps labels.
+const label = Space_Mono({
+  variable: "--font-label",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "700"],
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -25,7 +25,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${display.variable} ${body.variable} h-full antialiased`}
+      className={`${display.variable} ${label.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-body">{children}</body>
     </html>
