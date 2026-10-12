@@ -11,6 +11,8 @@ import {
   Radar,
   Search,
   Sparkles,
+  Target,
+  Users,
   Video,
 } from "lucide-react";
 import {
@@ -37,6 +39,14 @@ const PRESETS = [
   { label: "Tech Reviews", query: "tech reviews" },
 ];
 
+const FORMATS = [
+  { value: "any", label: "All Formats" },
+  { value: "short", label: "Shorts (<60s)" },
+  { value: "long", label: "Long-Form (>5m)" },
+] as const;
+
+type Format = (typeof FORMATS)[number]["value"];
+
 const BAR_COLORS = ["#39ff14", "#a64dff", "#d6d9e4", "#39ff14", "#a64dff"];
 
 const TICKER = ["GO VIRAL", "SUNDAY BRIEF", "TREND RADAR", "MAKE NOISE", "STEAL THE ALGORITHM", "POST LOUD"];
@@ -46,6 +56,7 @@ interface BriefResponse {
   brief?: SundayBrief;
   videoCount?: number;
   isMock?: boolean;
+  competitorsMock?: boolean;
   error?: string;
 }
 
@@ -57,6 +68,9 @@ export default function Home() {
   const [brief, setBrief] = useState<SundayBrief | null>(null);
   const [videoCount, setVideoCount] = useState(0);
   const [isMock, setIsMock] = useState(false);
+  const [competitorsMock, setCompetitorsMock] = useState(false);
+  const [format, setFormat] = useState<Format>("any");
+  const [competitorHandles, setCompetitorHandles] = useState("");
 
   async function generate() {
     setLoading(true);
@@ -65,7 +79,12 @@ export default function Home() {
       const res = await fetch("/api/brief", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query.trim() || undefined, regionCode }),
+        body: JSON.stringify({
+          query: query.trim() || undefined,
+          regionCode,
+          duration: format,
+          competitorHandles,
+        }),
       });
       const data = (await res.json()) as BriefResponse;
       if (!res.ok || !data.success || !data.brief) {
@@ -74,6 +93,7 @@ export default function Home() {
       setBrief(data.brief);
       setVideoCount(data.videoCount ?? 0);
       setIsMock(Boolean(data.isMock));
+      setCompetitorsMock(Boolean(data.competitorsMock));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong");
     } finally {
@@ -154,6 +174,46 @@ export default function Home() {
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
               {loading ? "Cooking…" : "Generate Sunday Brief"}
             </button>
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div
+              role="radiogroup"
+              aria-label="Video format"
+              className="inline-flex shrink-0 overflow-hidden rounded-xl border-2 border-zinc-700 bg-zinc-950"
+            >
+              {FORMATS.map((f) => {
+                const active = format === f.value;
+                return (
+                  <button
+                    key={f.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setFormat(f.value)}
+                    className={
+                      "px-3.5 py-2.5 font-display text-[10px] font-bold uppercase tracking-wide transition " +
+                      (active ? "bg-[#a64dff] text-white" : "text-zinc-400 hover:text-white")
+                    }
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative flex-1">
+              <Users className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#a64dff]" />
+              <input
+                type="text"
+                value={competitorHandles}
+                onChange={(e) => setCompetitorHandles(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !loading && generate()}
+                placeholder="Competitor Handles (e.g., @TechBurner, @MKBHD)"
+                aria-label="Competitor handles"
+                className="h-11 w-full rounded-xl border-2 border-zinc-700 bg-zinc-950 pl-10 pr-3 text-base font-light text-white placeholder:text-zinc-500 focus:border-[#a64dff] focus:outline-none"
+              />
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -238,6 +298,45 @@ export default function Home() {
               <Kpi tone="purple" icon={<Flame className="size-5" />} label="Top Emerging Cluster" value={topCluster?.clusterName ?? "—"} small />
               <Kpi tone="chrome" icon={<Video className="size-5" />} label="Videos Analyzed" value={String(videoCount)} />
             </section>
+
+            {/* Unclaimed gaps */}
+            {brief.unclaimedGaps?.length > 0 && (
+              <section className="rounded-3xl border-2 border-black bg-[#39ff14] p-5 text-black shadow-[8px_8px_0_#8b2dff] sm:p-7">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center gap-2 font-display text-xl font-black uppercase tracking-tight">
+                    <Target className="size-5" /> Unclaimed Content Gaps
+                  </h2>
+                  <span className="rounded-full bg-black px-3 py-1 font-display text-[10px] font-bold uppercase tracking-wider text-[#39ff14]">
+                    {competitorsMock ? "Vs sample competitors" : "Vs your competitors"}
+                  </span>
+                </div>
+                <p className="mb-5 max-w-3xl font-normal leading-snug">
+                  High-demand topics your competitors haven&apos;t covered yet. Be first.
+                </p>
+                <div className="grid gap-4 md:grid-cols-3">
+                  {brief.unclaimedGaps.map((g, i) => (
+                    <article
+                      key={g.topic}
+                      className={
+                        "flex flex-col gap-2.5 rounded-2xl border-2 border-black bg-black p-4 text-zinc-200 " +
+                        (i % 2 ? "rotate-[0.5deg]" : "-rotate-[0.5deg]")
+                      }
+                    >
+                      <span className="w-fit rounded-full bg-[#a64dff] px-3 py-1 font-display text-[11px] font-black uppercase leading-tight tracking-wide text-white">
+                        {g.topic}
+                      </span>
+                      <p className="text-sm font-light leading-relaxed">{g.reason}</p>
+                      <div className="mt-auto rounded-xl border-2 border-[#39ff14] p-3">
+                        <h3 className="mb-1 font-display text-[10px] font-bold uppercase tracking-widest text-[#39ff14]">
+                          Suggested angle
+                        </h3>
+                        <p className="text-sm font-medium leading-snug text-white">{g.suggestedAngle}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Chart */}
             <section className="rounded-3xl border-2 border-zinc-700 bg-black/70 p-4 shadow-[6px_6px_0_#8b2dff] sm:p-6">

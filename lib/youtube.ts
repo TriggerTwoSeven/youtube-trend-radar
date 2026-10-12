@@ -14,6 +14,19 @@ export interface TrendingVideo {
   duration: string; // ISO 8601 duration, e.g. PT12M34S
   durationSeconds: number;
   url: string;
+  /** Set only on competitor uploads. */
+  competitorHandle?: string;
+}
+
+export type VideoFormat = "any" | "short" | "long";
+
+export const SHORT_MAX_SECONDS = 60;
+export const LONG_MIN_SECONDS = 300;
+
+export function matchesFormat(durationSeconds: number, format: VideoFormat): boolean {
+  if (format === "short") return durationSeconds > 0 && durationSeconds <= SHORT_MAX_SECONDS;
+  if (format === "long") return durationSeconds >= LONG_MIN_SECONDS;
+  return true;
 }
 
 interface SearchListResponse {
@@ -39,6 +52,16 @@ interface VideosListResponse {
   }[];
 }
 
+type VideoItem = NonNullable<VideosListResponse["items"]>[number];
+
+interface ChannelsListResponse {
+  items?: { contentDetails?: { relatedPlaylists?: { uploads?: string } } }[];
+}
+
+interface PlaylistItemsResponse {
+  items?: { contentDetails?: { videoId?: string } }[];
+}
+
 export function parseIsoDuration(iso: string): number {
   const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/.exec(iso);
   if (!m) return 0;
@@ -59,8 +82,9 @@ async function fetchFromYouTube(
   query: string,
   regionCode: string,
   apiKey: string,
+  format: VideoFormat,
 ): Promise<TrendingVideo[]> {
-  const search = await ytGet<SearchListResponse>("search", {
+  const searchParams: Record<string, string> = {
     part: "snippet",
     q: query,
     type: "video",
@@ -69,7 +93,14 @@ async function fetchFromYouTube(
     regionCode,
     publishedAfter: new Date(Date.now() - 30 * 86400_000).toISOString(),
     key: apiKey,
-  });
+  };
+  // YouTube buckets: short < 4 min, medium 4-20 min, long > 20 min. Shorts map to
+  // 'short'; long-form maps to 'medium' (where most 5+ min videos sit). Exact
+  // cut-offs (<=60s / >=5 min) are enforced after videos.list returns real durations.
+  if (format === "short") searchParams.videoDuration = "short";
+  else if (format === "long") searchParams.videoDuration = "medium";
+
+  const search = await ytGet<SearchListResponse>("search", searchParams);
 
   const ids = (search.items ?? [])
     .map((i) => i.id?.videoId)
@@ -83,7 +114,15 @@ async function fetchFromYouTube(
     key: apiKey,
   });
 
-  return (details.items ?? []).map((v) => ({
+  const videos = (details.items ?? [])
+    .map(toTrendingVideo)
+    .filter((v) => matchesFormat(v.durationSeconds, format));
+  if (videos.length === 0) throw new Error(`No videos matched format "${format}"`);
+  return videos;
+}
+
+function toTrendingVideo(v: VideoItem): TrendingVideo {
+  return {
     id: v.id,
     title: v.snippet.title,
     description: v.snippet.description ?? "",
@@ -99,33 +138,35 @@ async function fetchFromYouTube(
     duration: v.contentDetails.duration,
     durationSeconds: parseIsoDuration(v.contentDetails.duration),
     url: `https://www.youtube.com/watch?v=${v.id}`,
-  }));
+  };
 }
 
 /**
- * Fetches up to 50 recent videos for a query with stats.
+ * Fetches up to 50 recent videos for a query with stats, optionally limited to
+ * Shorts (<=60s) or long-form (>=5 min).
  * Never throws: falls back to mock data when NEXT_PUBLIC_USE_MOCK_DATA === 'true',
  * when no API key is set, or when the YouTube API call fails.
  */
 export async function fetchTrendingVideos(
   query: string,
   regionCode: string = "IN",
+  videoDuration: VideoFormat = "any",
 ): Promise<TrendingVideo[]> {
   if (process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true") {
-    return getMockVideos(query);
+    return getMockVideos(query, videoDuration);
   }
 
   const apiKey = process.env.YOUTUBE_API_KEY;
   if (!apiKey) {
     console.warn("[youtube] YOUTUBE_API_KEY missing; using mock data");
-    return getMockVideos(query);
+    return getMockVideos(query, videoDuration);
   }
 
   try {
-    return await fetchFromYouTube(query, regionCode, apiKey);
+    return await fetchFromYouTube(query, regionCode, apiKey, videoDuration);
   } catch (err) {
     console.warn("[youtube] API call failed; using mock data:", err);
-    return getMockVideos(query);
+    return getMockVideos(query, videoDuration);
   }
 }
 
@@ -175,13 +216,22 @@ const MOCK_SEEDS: MockSeed[] = [
   { title: "iPhone vs Pixel AI Features: Real-World India Test", channel: "Geekyranjit", views: 934_600, likeRate: 0.04, commentRate: 0.0038, duration: "PT14M08S", hoursAgo: 60, description: "On-device AI features compared in everyday use." },
   { title: "10 Mac Productivity Apps + AI Shortcuts You Need", channel: "Tech Zaada", views: 156_700, likeRate: 0.053, commentRate: 0.0029, duration: "PT9M33S", hoursAgo: 160, description: "Raycast, Arc and AI workflow shortcuts for developers." },
   { title: "AI Shorts Factory: Earn ₹1 Lakh/Month with Faceless Channels?", channel: "Hustle With AI", views: 1_030_000, likeRate: 0.035, commentRate: 0.0065, duration: "PT13M01S", hoursAgo: 48, description: "Reality check on faceless AI YouTube channels." },
+  // Shorts (<= 60s)
+  { title: "Cursor AI in 60 Seconds: Build a Website #shorts", channel: "Code Short India", views: 2_340_000, likeRate: 0.081, commentRate: 0.0021, duration: "PT58S", hoursAgo: 20, description: "One-minute Cursor demo." },
+  { title: "This AI Tool Edits Videos For You (Free) #shorts", channel: "Tech Reels Hindi", views: 3_870_000, likeRate: 0.074, commentRate: 0.0019, duration: "PT45S", hoursAgo: 34, description: "Free AI video editor that cuts silences and adds captions." },
+  { title: "3 ChatGPT Prompts That Save 2 Hours a Day #shorts", channel: "Productivity Bhai", views: 1_620_000, likeRate: 0.069, commentRate: 0.0024, duration: "PT52S", hoursAgo: 42, description: "Quick prompt hacks for students and professionals." },
+  { title: "Veo 3 Made This Ad in 1 Prompt #shorts", channel: "AI Reels India", views: 4_510_000, likeRate: 0.088, commentRate: 0.0017, duration: "PT30S", hoursAgo: 16, description: "Text-to-video ad generated end to end by AI." },
+  { title: "Notion AI Setup in 1 Minute #shorts", channel: "Notion Nerd India", views: 876_400, likeRate: 0.061, commentRate: 0.0022, duration: "PT59S", hoursAgo: 60, description: "Fast productivity setup using Notion AI." },
+  { title: "VS Code Shortcut Every Dev Must Know #shorts", channel: "Dev Shorts Hindi", views: 1_190_000, likeRate: 0.072, commentRate: 0.0026, duration: "PT37S", hoursAgo: 28, description: "A shortcut that speeds up coding." },
+  { title: "Gemini vs ChatGPT: One Question, Two Answers #shorts", channel: "Tech Burner Shorts", views: 2_760_000, likeRate: 0.066, commentRate: 0.0031, duration: "PT48S", hoursAgo: 12, description: "Quick head-to-head AI chatbot test." },
+  { title: "Vibe Coding a Game in 60s With AI #shorts", channel: "Chai Shorts", views: 987_300, likeRate: 0.077, commentRate: 0.0028, duration: "PT55S", hoursAgo: 8, description: "Prompt-to-playable game demo." },
 ];
 
-function getMockVideos(query: string): TrendingVideo[] {
+function getMockVideos(query: string, format: VideoFormat = "any"): TrendingVideo[] {
   const q = query.trim().toLowerCase();
   const now = Date.now();
 
-  const all = MOCK_SEEDS.map((s, i): TrendingVideo => {
+  const allVideos = MOCK_SEEDS.map((s, i): TrendingVideo => {
     const id = `mock_${String(i + 1).padStart(3, "0")}`;
     return {
       id,
@@ -199,6 +249,8 @@ function getMockVideos(query: string): TrendingVideo[] {
     };
   });
 
+  const all = allVideos.filter((v) => matchesFormat(v.durationSeconds, format));
+
   // Prefer videos matching the query, but always return a usable list.
   const terms = q.split(/\s+/).filter(Boolean);
   const matches = terms.length
@@ -209,4 +261,111 @@ function getMockVideos(query: string): TrendingVideo[] {
     : all;
   const rest = all.filter((v) => !matches.includes(v));
   return [...matches, ...rest].slice(0, MAX_RESULTS);
+}
+
+// ---------------------------------------------------------------------------
+// Competitor uploads
+// ---------------------------------------------------------------------------
+
+const MAX_COMPETITOR_HANDLES = 5;
+const UPLOADS_PER_COMPETITOR = 10;
+
+async function fetchChannelUploads(handle: string, apiKey: string): Promise<TrendingVideo[]> {
+  const channels = await ytGet<ChannelsListResponse>("channels", {
+    part: "contentDetails",
+    forHandle: handle,
+    key: apiKey,
+  });
+  const uploads = channels.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+  if (!uploads) return [];
+
+  const playlist = await ytGet<PlaylistItemsResponse>("playlistItems", {
+    part: "contentDetails",
+    playlistId: uploads,
+    maxResults: String(UPLOADS_PER_COMPETITOR),
+    key: apiKey,
+  });
+  const ids = (playlist.items ?? [])
+    .map((i) => i.contentDetails?.videoId)
+    .filter((id): id is string => Boolean(id));
+  if (ids.length === 0) return [];
+
+  const details = await ytGet<VideosListResponse>("videos", {
+    part: "snippet,statistics,contentDetails",
+    id: ids.join(","),
+    key: apiKey,
+  });
+  return (details.items ?? []).map((v) => ({ ...toTrendingVideo(v), competitorHandle: handle }));
+}
+
+/**
+ * Fetches recent uploads for the given channel handles (e.g. "@TechBurner").
+ * Uses channels.list + playlistItems.list (about 3 quota units per channel).
+ * Returns mock competitor videos when no handles/key are given, in mock mode,
+ * or when nothing could be fetched. Never throws.
+ */
+export async function fetchCompetitorVideos(handles: string[]): Promise<TrendingVideo[]> {
+  const clean = [
+    ...new Set(
+      handles
+        .map((h) => h.trim())
+        .filter(Boolean)
+        .map((h) => (h.startsWith("@") ? h : `@${h}`)),
+    ),
+  ].slice(0, MAX_COMPETITOR_HANDLES);
+
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (clean.length === 0 || !apiKey || process.env.NEXT_PUBLIC_USE_MOCK_DATA === "true") {
+    return getMockCompetitorVideos(clean);
+  }
+
+  const results = await Promise.allSettled(clean.map((h) => fetchChannelUploads(h, apiKey)));
+  const videos = results.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  results.forEach((r, i) => {
+    if (r.status === "rejected") console.warn(`[youtube] competitor ${clean[i]} failed:`, r.reason);
+  });
+
+  return videos.length > 0 ? videos : getMockCompetitorVideos(clean);
+}
+
+// Competitor mocks cover some trending topics (Cursor, model showdowns, laptops)
+// and deliberately skip others (NotebookLM, AI agents/n8n, voice cloning, Veo, faceless channels)
+// so the "unclaimed gaps" analysis has something real to find.
+const MOCK_COMPETITOR_SEEDS = [
+  { title: "Cursor vs Copilot: Which AI Editor Wins? (Hindi)", views: 720_000, hoursAgo: 40, duration: "PT16M10S", description: "Comparison of the two most popular AI coding editors." },
+  { title: "ChatGPT vs Gemini: Honest Review After 30 Days", views: 1_050_000, hoursAgo: 55, duration: "PT19M02S", description: "Daily-driver comparison of the top AI chatbots." },
+  { title: "Best Laptops Under 70,000 for Students in 2026", views: 1_380_000, hoursAgo: 72, duration: "PT15M44S", description: "Budget laptop picks for college and coding." },
+  { title: "iPhone 17 vs Pixel 11: Camera and AI Test", views: 1_940_000, hoursAgo: 30, duration: "PT13M31S", description: "Camera and on-device AI features compared." },
+  { title: "Top 5 Free AI Tools for Students", views: 610_000, hoursAgo: 90, duration: "PT10M05S", description: "Free AI tools for notes, writing and coding." },
+  { title: "I Tried Windsurf for a Week", views: 245_000, hoursAgo: 110, duration: "PT12M20S", description: "Weeklong trial of the Windsurf IDE." },
+  { title: "Smartwatch Buying Guide: What Actually Matters", views: 430_000, hoursAgo: 66, duration: "PT11M48S", description: "How to pick a smartwatch in India." },
+  { title: "Perplexity Pro Worth It? Real Usage Review", views: 388_000, hoursAgo: 48, duration: "PT9M37S", description: "Is Perplexity Pro worth the subscription?" },
+  { title: "Is Your Phone's AI Spying on You?", views: 905_000, hoursAgo: 36, duration: "PT14M26S", description: "Privacy concerns around on-device AI assistants." },
+  { title: "Notion Setup for Students (Template)", views: 195_000, hoursAgo: 130, duration: "PT8M52S", description: "Student productivity template walkthrough." },
+];
+
+const DEFAULT_MOCK_COMPETITORS = ["@TechBurner", "@Beebom", "@TechnicalGuruji"];
+
+function getMockCompetitorVideos(handles: string[]): TrendingVideo[] {
+  const owners = handles.length > 0 ? handles : DEFAULT_MOCK_COMPETITORS;
+  const now = Date.now();
+  return MOCK_COMPETITOR_SEEDS.map((s, i): TrendingVideo => {
+    const id = `mock_comp_${String(i + 1).padStart(3, "0")}`;
+    const handle = owners[i % owners.length];
+    return {
+      id,
+      title: s.title,
+      description: s.description,
+      channelTitle: handle.replace(/^@/, ""),
+      publishedAt: new Date(now - s.hoursAgo * 3600_000).toISOString(),
+      thumbnailUrl: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+      viewCount: s.views,
+      likeCount: Math.round(s.views * 0.045),
+      commentCount: Math.round(s.views * 0.003),
+      duration: s.duration,
+      durationSeconds: parseIsoDuration(s.duration),
+      url: `https://www.youtube.com/watch?v=${id}`,
+      competitorHandle: handle,
+    };
+  });
 }

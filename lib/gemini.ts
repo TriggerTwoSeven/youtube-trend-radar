@@ -10,11 +10,18 @@ export interface ThemeCluster {
   recommendedDuration: string;
 }
 
+export interface UnclaimedGap {
+  topic: string;
+  reason: string;
+  suggestedAngle: string;
+}
+
 export interface SundayBrief {
   executiveSummary: string;
   winningFormats: string[];
   durationSweetSpot: string;
   themeClusters: ThemeCluster[];
+  unclaimedGaps: UnclaimedGap[];
 }
 
 const DEFAULT_MODEL = "gemini-3.5-flash";
@@ -50,8 +57,22 @@ const BRIEF_SCHEMA = {
         ],
       },
     },
+    unclaimedGaps: {
+      type: Type.ARRAY,
+      minItems: "2",
+      maxItems: "3",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          topic: { type: Type.STRING },
+          reason: { type: Type.STRING },
+          suggestedAngle: { type: Type.STRING },
+        },
+        required: ["topic", "reason", "suggestedAngle"],
+      },
+    },
   },
-  required: ["executiveSummary", "winningFormats", "durationSweetSpot", "themeClusters"],
+  required: ["executiveSummary", "winningFormats", "durationSweetSpot", "themeClusters", "unclaimedGaps"],
 };
 
 const SYSTEM_INSTRUCTION =
@@ -59,15 +80,21 @@ const SYSTEM_INSTRUCTION =
   "Analyse the provided trending videos and write a concise weekly 'Sunday Brief' " +
   "that tells a creator what to make next. Base every claim on the data provided " +
   "(views, likes, comments, duration, publish date). Group videos into 3 to 5 theme " +
-  "clusters, and make videoCount reflect how many of the provided videos fit each cluster.";
+  "clusters, and make videoCount reflect how many of the provided videos fit each cluster. " +
+  "You are also given recent competitor uploads. Cross-reference the trending topics against " +
+  "those competitor uploads and output 2 to 3 unclaimedGaps: high-demand topics from the trending " +
+  "videos that the competitors have NOT covered recently. For each, give the topic, the reason " +
+  "it is a gap (cite the demand evidence and what competitors posted instead), and a suggestedAngle.";
 
 function truncate(text: unknown, max: number): string {
   const s = typeof text === "string" ? text.replace(/\s+/g, " ").trim() : "";
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toPromptVideos(videos: any[]) {
   return videos.map((v) => ({
+    ...(v?.competitorHandle ? { competitor: v.competitorHandle } : {}),
     title: v?.title ?? "",
     channel: v?.channelTitle ?? "",
     publishedAt: v?.publishedAt ?? "",
@@ -84,7 +111,7 @@ function isNonEmptyString(x: unknown): x is string {
 }
 
 /** Returns a cleaned brief, or null if the shape does not match the schema. */
-function validateBrief(raw: unknown): SundayBrief | null {
+function validateBrief(raw: unknown, fallbackGaps: UnclaimedGap[]): SundayBrief | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
 
@@ -119,11 +146,24 @@ function validateBrief(raw: unknown): SundayBrief | null {
     });
   }
 
+  // Gaps are a secondary section: if Gemini's are malformed, swap in heuristic
+  // ones instead of discarding an otherwise valid brief.
+  const gaps: UnclaimedGap[] = [];
+  if (Array.isArray(r.unclaimedGaps)) {
+    for (const g of r.unclaimedGaps) {
+      const o = (g && typeof g === "object" ? g : {}) as Record<string, unknown>;
+      if (isNonEmptyString(o.topic) && isNonEmptyString(o.reason) && isNonEmptyString(o.suggestedAngle)) {
+        gaps.push({ topic: o.topic, reason: o.reason, suggestedAngle: o.suggestedAngle });
+      }
+    }
+  }
+
   return {
     executiveSummary: r.executiveSummary,
     winningFormats: r.winningFormats as string[],
     durationSweetSpot: r.durationSweetSpot,
     themeClusters: clusters,
+    unclaimedGaps: gaps.length >= 2 ? gaps.slice(0, 3) : fallbackGaps,
   };
 }
 
@@ -133,8 +173,14 @@ function parseJson(text: string): unknown {
   return JSON.parse(cleaned);
 }
 
-export async function generateSundayBrief(videos: any[]): Promise<SundayBrief> {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export async function generateSundayBrief(
+  videos: any[],
+  competitorVideos: any[] = [],
+): Promise<SundayBrief> {
+  /* eslint-enable @typescript-eslint/no-explicit-any */
   const list = Array.isArray(videos) ? videos : [];
+  const competitors = Array.isArray(competitorVideos) ? competitorVideos : [];
 
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -145,9 +191,12 @@ export async function generateSundayBrief(videos: any[]): Promise<SundayBrief> {
     const response = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || DEFAULT_MODEL,
       contents:
-        "Here are this week's trending YouTube videos (JSON). " +
-        "Produce the Sunday Brief.\n\n" +
-        JSON.stringify(toPromptVideos(list)),
+        "Here are this week's trending YouTube videos and recent competitor uploads (JSON). " +
+        "Produce the Sunday Brief, including unclaimedGaps.\n\n" +
+        JSON.stringify({
+          trendingVideos: toPromptVideos(list),
+          competitorUploads: toPromptVideos(competitors),
+        }),
       config: {
         systemInstruction: SYSTEM_INSTRUCTION,
         responseMimeType: "application/json",
@@ -159,12 +208,12 @@ export async function generateSundayBrief(videos: any[]): Promise<SundayBrief> {
     const text = response.text;
     if (!text) throw new Error("Empty response from Gemini");
 
-    const brief = validateBrief(parseJson(text));
+    const brief = validateBrief(parseJson(text), buildFallbackGaps(list, competitors));
     if (!brief) throw new Error("Gemini response did not match the brief schema");
     return brief;
   } catch (err) {
     console.warn("[gemini] Falling back to generated brief:", err);
-    return buildFallbackBrief(list);
+    return buildFallbackBrief(list, competitors);
   }
 }
 
@@ -229,7 +278,42 @@ function median(nums: number[]): number {
   return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
 }
 
-function buildFallbackBrief(videos: Partial<TrendingVideo>[]): SundayBrief {
+function countMatching(items: Partial<TrendingVideo>[], keywords: string[]): number {
+  return items.filter((v) => {
+    const hay = `${v.title ?? ""} ${truncate(v.description, MAX_DESCRIPTION_CHARS)}`.toLowerCase();
+    return keywords.some((k) => hay.includes(k));
+  }).length;
+}
+
+/** Themes with trending demand but the fewest competitor uploads. */
+function buildFallbackGaps(
+  videos: Partial<TrendingVideo>[],
+  competitors: Partial<TrendingVideo>[],
+): UnclaimedGap[] {
+  let rows = FALLBACK_THEMES.map((t) => ({
+    t,
+    trending: countMatching(videos, t.keywords),
+    competitor: countMatching(competitors, t.keywords),
+  }));
+  const withDemand = rows.filter((r) => r.trending > 0);
+  if (withDemand.length >= 2) rows = withDemand;
+
+  return rows
+    .sort((a, b) => a.competitor - b.competitor || b.trending - a.trending)
+    .slice(0, 3)
+    .map(({ t, trending, competitor }) => ({
+      topic: t.name,
+      reason:
+        `${trending} trending video${trending === 1 ? "" : "s"} this week, but ` +
+        `${competitor === 0 ? "no" : `only ${competitor}`} recent competitor upload${competitor === 1 ? "" : "s"} cover it. ${t.why}`,
+      suggestedAngle: t.hook,
+    }));
+}
+
+function buildFallbackBrief(
+  videos: Partial<TrendingVideo>[],
+  competitors: Partial<TrendingVideo>[] = [],
+): SundayBrief {
   const haystacks = videos.map((v) => `${v.title ?? ""} ${truncate(v.description, MAX_DESCRIPTION_CHARS)}`.toLowerCase());
 
   // Score each theme by how many videos match it; keep the top 3-5 (always at least 3).
@@ -273,5 +357,6 @@ function buildFallbackBrief(videos: Partial<TrendingVideo>[]): SundayBrief {
     ],
     durationSweetSpot,
     themeClusters: clusters,
+    unclaimedGaps: buildFallbackGaps(videos, competitors),
   };
 }
