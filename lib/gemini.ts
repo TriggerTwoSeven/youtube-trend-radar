@@ -360,3 +360,164 @@ function buildFallbackBrief(
     unclaimedGaps: buildFallbackGaps(videos, competitors),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Script outline & thumbnail concepts
+// ---------------------------------------------------------------------------
+
+export interface ThumbnailConcept {
+  visualDescription: string;
+  overlayText: string;
+  aiPrompt: string;
+}
+
+export interface ScriptPackage {
+  hook: {
+    hookLine: string;
+    problemSetup: string;
+    payoff: string;
+  };
+  titleVariations: string[];
+  thumbnailConcepts: ThumbnailConcept[];
+}
+
+const SCRIPT_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    hook: {
+      type: Type.OBJECT,
+      properties: {
+        hookLine: { type: Type.STRING },
+        problemSetup: { type: Type.STRING },
+        payoff: { type: Type.STRING },
+      },
+      required: ["hookLine", "problemSetup", "payoff"],
+    },
+    titleVariations: {
+      type: Type.ARRAY,
+      minItems: "3",
+      maxItems: "3",
+      items: { type: Type.STRING },
+    },
+    thumbnailConcepts: {
+      type: Type.ARRAY,
+      minItems: "2",
+      maxItems: "2",
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          visualDescription: { type: Type.STRING },
+          overlayText: { type: Type.STRING },
+          aiPrompt: { type: Type.STRING },
+        },
+        required: ["visualDescription", "overlayText", "aiPrompt"],
+      },
+    },
+  },
+  required: ["hook", "titleVariations", "thumbnailConcepts"],
+};
+
+const SCRIPT_SYSTEM_INSTRUCTION =
+  "You are a YouTube scriptwriter and thumbnail designer for Indian tech and AI creators. " +
+  "Given a content cluster and an angle, write the opening of the video as a 3-part hook " +
+  "(hookLine: the first spoken sentence; problemSetup: the pain or curiosity gap the viewer has; " +
+  "payoff: what they will get by the end). Write exactly 3 click-optimised title variations " +
+  "(under 70 characters, no clickbait lies). Write exactly 2 thumbnail concepts. For each, " +
+  "overlayText is 2 to 4 punchy words, and aiPrompt is a ready-to-paste Midjourney/Ideogram prompt " +
+  "(subject, composition, lighting, colours, style, and the overlay text spelled out) ending with " +
+  "'--ar 16:9'.";
+
+function validateScript(raw: unknown): ScriptPackage | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const h = r.hook as Record<string, unknown> | undefined;
+  if (
+    !h ||
+    !isNonEmptyString(h.hookLine) ||
+    !isNonEmptyString(h.problemSetup) ||
+    !isNonEmptyString(h.payoff)
+  ) {
+    return null;
+  }
+  if (!Array.isArray(r.titleVariations) || r.titleVariations.filter(isNonEmptyString).length < 3) return null;
+  if (!Array.isArray(r.thumbnailConcepts)) return null;
+
+  const concepts: ThumbnailConcept[] = [];
+  for (const c of r.thumbnailConcepts) {
+    const o = (c && typeof c === "object" ? c : {}) as Record<string, unknown>;
+    if (isNonEmptyString(o.visualDescription) && isNonEmptyString(o.overlayText) && isNonEmptyString(o.aiPrompt)) {
+      concepts.push({
+        visualDescription: o.visualDescription,
+        overlayText: o.overlayText,
+        aiPrompt: o.aiPrompt,
+      });
+    }
+  }
+  if (concepts.length < 2) return null;
+
+  return {
+    hook: { hookLine: h.hookLine, problemSetup: h.problemSetup, payoff: h.payoff },
+    titleVariations: (r.titleVariations as string[]).filter(isNonEmptyString).slice(0, 3),
+    thumbnailConcepts: concepts.slice(0, 2),
+  };
+}
+
+export async function generateScriptAndThumbnails(
+  clusterName: string,
+  angleOrHook: string,
+): Promise<ScriptPackage> {
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY is not set");
+
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: process.env.GEMINI_MODEL || DEFAULT_MODEL,
+      contents: JSON.stringify({ clusterName, angleOrHook }),
+      config: {
+        systemInstruction: SCRIPT_SYSTEM_INSTRUCTION,
+        responseMimeType: "application/json",
+        responseSchema: SCRIPT_SCHEMA,
+        temperature: 0.8,
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Empty response from Gemini");
+
+    const pkg = validateScript(parseJson(text));
+    if (!pkg) throw new Error("Gemini response did not match the script schema");
+    return pkg;
+  } catch (err) {
+    console.warn("[gemini] Script generation fell back:", err);
+    return buildFallbackScript(clusterName, angleOrHook);
+  }
+}
+
+function buildFallbackScript(clusterName: string, angleOrHook: string): ScriptPackage {
+  const topic = clusterName.replace(/\s*\(.*?\)\s*/g, " ").trim() || "this trend";
+  return {
+    hook: {
+      hookLine: `Everyone is talking about ${topic}, but almost nobody is showing you what actually works.`,
+      problemSetup: `You have seen the hype, tried a few things and still don't know what is worth your time. ${angleOrHook}`,
+      payoff: `By the end of this video you will have a clear, tested way to use ${topic} this week, with no fluff.`,
+    },
+    titleVariations: [
+      `I Tested ${topic}: Here's What Actually Works`,
+      `${topic}: The Honest Truth Nobody Tells You`,
+      `Stop Wasting Time: ${topic} Done Right in 2026`,
+    ],
+    thumbnailConcepts: [
+      {
+        visualDescription: `Close-up of a shocked creator face on the left, glowing laptop on the right showing ${topic}, neon purple and green rim light on a black background.`,
+        overlayText: "IT WORKS?!",
+        aiPrompt: `Shocked young Indian creator pointing at a glowing laptop, neon purple and acid green rim lighting, black background, bold sticker-style text reading "IT WORKS?!", high contrast, YouTube thumbnail, cinematic, ultra sharp --ar 16:9`,
+      },
+      {
+        visualDescription: `Split-screen before and after: messy desk with sticky notes versus a clean glowing AI-powered workspace, big arrow between them.`,
+        overlayText: "BEFORE vs AFTER",
+        aiPrompt: `Split-screen thumbnail, left side chaotic desk with sticky notes in grey tones, right side clean futuristic AI workspace in neon green and purple glow, thick white arrow in the middle, bold text "BEFORE vs AFTER", chrome silver accents, high contrast --ar 16:9`,
+      },
+    ],
+  };
+}

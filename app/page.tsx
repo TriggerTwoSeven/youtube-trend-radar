@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
+  Check,
   Clapperboard,
   Clock,
+  Copy,
+  FileText,
   Flame,
   Lightbulb,
   Loader2,
@@ -14,6 +17,7 @@ import {
   Target,
   Users,
   Video,
+  X,
 } from "lucide-react";
 import {
   Bar,
@@ -25,7 +29,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { SundayBrief } from "@/lib/gemini";
+import type { ScriptPackage, SundayBrief, ThemeCluster } from "@/lib/gemini";
 
 const REGIONS = [
   { code: "IN", label: "India (IN)" },
@@ -71,6 +75,56 @@ export default function Home() {
   const [competitorsMock, setCompetitorsMock] = useState(false);
   const [format, setFormat] = useState<Format>("any");
   const [competitorHandles, setCompetitorHandles] = useState("");
+
+  const [scriptFor, setScriptFor] = useState<ThemeCluster | null>(null);
+  const [script, setScript] = useState<ScriptPackage | null>(null);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState<string | null>(null);
+  const scriptReq = useRef(0);
+
+  async function openScript(c: ThemeCluster) {
+    const id = ++scriptReq.current;
+    setScriptFor(c);
+    setScript(null);
+    setScriptError(null);
+    setScriptLoading(true);
+    try {
+      const res = await fetch("/api/script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clusterName: c.clusterName, angleOrHook: c.angleOrHook }),
+      });
+      const data = (await res.json()) as { success: boolean; script?: ScriptPackage; error?: string };
+      if (id !== scriptReq.current) return; // modal closed or reopened meanwhile
+      if (!res.ok || !data.success || !data.script) {
+        throw new Error(data.error || `Request failed (${res.status})`);
+      }
+      setScript(data.script);
+    } catch (e) {
+      if (id !== scriptReq.current) return;
+      setScriptError(e instanceof Error ? e.message : "Something went wrong");
+    } finally {
+      if (id === scriptReq.current) setScriptLoading(false);
+    }
+  }
+
+  function closeScript() {
+    scriptReq.current++;
+    setScriptFor(null);
+    setScriptLoading(false);
+  }
+
+  useEffect(() => {
+    if (!scriptFor) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeScript();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [scriptFor]);
 
   async function generate() {
     setLoading(true);
@@ -404,10 +458,17 @@ export default function Home() {
                     <p className="mt-1.5 text-sm font-normal leading-snug">{c.angleOrHook}</p>
                   </div>
 
-                  <div className="mt-auto">
+                  <div className="mt-auto flex flex-col items-start gap-3">
                     <span className="chrome-bg inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-display text-[10px] font-bold uppercase tracking-wide text-black">
                       <Clock className="size-3.5" /> {c.recommendedDuration}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => openScript(c)}
+                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border-2 border-[#a64dff] px-3 py-2.5 font-display text-[10px] font-black uppercase tracking-wider text-[#c9a0ff] transition hover:bg-[#a64dff] hover:text-white"
+                    >
+                      <FileText className="size-3.5" /> Generate Script &amp; Thumbnail Prompts
+                    </button>
                   </div>
                 </article>
               ))}
@@ -415,7 +476,217 @@ export default function Home() {
           </div>
         )}
       </main>
+
+      {scriptFor && (
+        <ScriptModal
+          cluster={scriptFor}
+          script={script}
+          loading={scriptLoading}
+          error={scriptError}
+          onClose={closeScript}
+          onRetry={() => openScript(scriptFor)}
+        />
+      )}
     </div>
+  );
+}
+
+function CopyButton({ text, label, className = "" }: { text: string; label: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard can be blocked (insecure context / permissions); fail quietly.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className={
+        "inline-flex items-center gap-1.5 rounded-lg border-2 border-black px-3 py-1.5 font-display text-[10px] font-black uppercase tracking-wider transition active:translate-y-0.5 " +
+        (copied ? "bg-white text-black" : "bg-[#39ff14] text-black hover:bg-[#6bff4d]") +
+        " " +
+        className
+      }
+    >
+      {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+      {copied ? "Copied!" : label}
+    </button>
+  );
+}
+
+function ScriptModal({
+  cluster,
+  script,
+  loading,
+  error,
+  onClose,
+  onRetry,
+}: {
+  cluster: ThemeCluster;
+  script: ScriptPackage | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+  onRetry: () => void;
+}) {
+  const hookSteps = script
+    ? [
+        { n: "01", label: "Hook line", text: script.hook.hookLine, tone: "bg-[#39ff14] text-black" },
+        { n: "02", label: "Problem setup", text: script.hook.problemSetup, tone: "bg-[#8b2dff] text-white" },
+        { n: "03", label: "Payoff", text: script.hook.payoff, tone: "chrome-bg text-black" },
+      ]
+    : [];
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto bg-black/80 p-4 backdrop-blur-sm sm:p-8"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Script and thumbnail prompts"
+        onClick={(e) => e.stopPropagation()}
+        className="mx-auto max-w-3xl rounded-3xl border-2 border-[#39ff14] bg-[#0b0814] p-5 text-zinc-200 shadow-[8px_8px_0_#8b2dff] sm:p-7"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <span className="font-display text-[10px] font-bold uppercase tracking-widest text-[#a64dff]">
+              Script &amp; thumbnails
+            </span>
+            <h2 className="font-display text-xl font-black uppercase leading-tight tracking-tight text-white">
+              {cluster.clusterName}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="shrink-0 rounded-lg border-2 border-zinc-600 p-1.5 text-zinc-300 transition hover:border-[#39ff14] hover:text-[#39ff14]"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {loading && (
+          <div className="flex items-center justify-center gap-3 py-16 font-display text-sm font-bold uppercase tracking-wide text-[#39ff14]">
+            <Loader2 className="size-5 animate-spin" /> Writing your script…
+          </div>
+        )}
+
+        {error && !loading && (
+          <div role="alert" className="space-y-3 rounded-xl border-2 border-red-500 bg-red-500/10 p-4 text-sm font-medium text-red-200">
+            <p>Couldn&apos;t generate the script: {error}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="rounded-lg border-2 border-red-400 px-3 py-1.5 font-display text-[10px] font-black uppercase tracking-wider hover:bg-red-400 hover:text-black"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {script && !loading && (
+          <div className="space-y-7">
+            <section>
+              <h3 className="mb-3 font-display text-xs font-black uppercase tracking-widest text-[#39ff14]">
+                3-part hook
+              </h3>
+              <div className="space-y-3">
+                {hookSteps.map((h) => (
+                  <div key={h.n} className={"rounded-xl border-2 border-black p-4 " + h.tone}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="font-display text-[10px] font-black uppercase tracking-widest opacity-80">
+                        {h.n} · {h.label}
+                      </span>
+                      <CopyButton text={h.text} label="Copy" className="!border-black/60 !bg-black/80 !text-white hover:!bg-black" />
+                    </div>
+                    <p className="text-base font-medium leading-snug">{h.text}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <h3 className="mb-3 font-display text-xs font-black uppercase tracking-widest text-[#39ff14]">
+                Title ideas <span className="font-light normal-case text-zinc-500">(click to copy)</span>
+              </h3>
+              <ul className="space-y-2">
+                {script.titleVariations.map((t) => (
+                  <li key={t}>
+                    <TitleChip title={t} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            <section>
+              <h3 className="mb-3 font-display text-xs font-black uppercase tracking-widest text-[#39ff14]">
+                Thumbnail concepts
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {script.thumbnailConcepts.map((t, i) => (
+                  <article key={i} className="flex flex-col gap-3 rounded-2xl border-2 border-[#a64dff] bg-black p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-display text-[10px] font-bold uppercase tracking-widest text-[#a64dff]">
+                        Concept {i + 1}
+                      </span>
+                      <span className="rounded bg-[#39ff14] px-2 py-0.5 font-display text-[10px] font-black uppercase text-black">
+                        {t.overlayText}
+                      </span>
+                    </div>
+                    <p className="text-sm font-light leading-relaxed">{t.visualDescription}</p>
+                    <div className="mt-auto space-y-2 rounded-xl border border-zinc-700 bg-zinc-950 p-3">
+                      <h4 className="font-display text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                        Midjourney / Ideogram prompt
+                      </h4>
+                      <p className="font-mono text-xs leading-relaxed text-zinc-300">{t.aiPrompt}</p>
+                      <CopyButton text={t.aiPrompt} label="Copy Prompt" />
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TitleChip({ title }: { title: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(title);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard unavailable; ignore.
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      className="flex w-full items-center justify-between gap-3 rounded-xl border-2 border-zinc-600 bg-zinc-950 px-4 py-3 text-left text-base font-medium text-white transition hover:border-[#39ff14]"
+    >
+      <span>{title}</span>
+      <span className="inline-flex shrink-0 items-center gap-1 font-display text-[10px] font-bold uppercase tracking-wider text-[#39ff14]">
+        {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        {copied ? "Copied!" : "Copy"}
+      </span>
+    </button>
   );
 }
 
