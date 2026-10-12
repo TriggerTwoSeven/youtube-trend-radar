@@ -37,7 +37,9 @@ const PRESETS = [
   { label: "Tech Reviews", query: "tech reviews" },
 ];
 
-const BAR_COLORS = ["#4f46e5", "#7c3aed", "#0891b2", "#059669", "#d97706"];
+const BAR_COLORS = ["#39ff14", "#a64dff", "#d6d9e4", "#39ff14", "#a64dff"];
+
+const TICKER = ["GO VIRAL", "SUNDAY BRIEF", "TREND RADAR", "MAKE NOISE", "STEAL THE ALGORITHM", "POST LOUD"];
 
 interface BriefResponse {
   success: boolean;
@@ -84,28 +86,45 @@ export default function Home() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-4 sm:px-6">
-          <div className="rounded-lg bg-red-600 p-2 text-white">
-            <Radar className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-lg font-semibold leading-tight">YouTube Trend Radar</h1>
-            <p className="text-sm text-slate-500">Your weekly Sunday Brief on what to make next</p>
-          </div>
+    <div className="grid-bg min-h-screen text-zinc-200">
+      {/* Ticker */}
+      <div className="overflow-hidden border-b-2 border-black bg-[#39ff14] py-1.5 text-black" aria-hidden="true">
+        <div className="marquee-track font-display text-xs font-black uppercase tracking-widest">
+          {[...TICKER, ...TICKER, ...TICKER, ...TICKER].map((t, i) => (
+            <span key={i} className="mx-4 whitespace-nowrap">
+              {t} <span className="mx-2 text-[#8b2dff]">✦</span>
+            </span>
+          ))}
         </div>
+      </div>
+
+      <header className="mx-auto flex max-w-6xl flex-col gap-4 px-4 pb-2 pt-10 sm:px-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <span className="wobble mb-4 inline-flex items-center gap-2 rounded-full border-2 border-black bg-[#39ff14] px-3 py-1 font-display text-[11px] font-black uppercase tracking-wider text-black shadow-[3px_3px_0_#8b2dff]">
+            <Radar className="size-3.5" /> Weekly Trend Lab
+          </span>
+          <h1 className="font-display text-5xl font-black uppercase leading-[0.9] tracking-tighter sm:text-7xl">
+            <span className="chrome-text">Trend</span>
+            <br />
+            <span className="text-[#39ff14]" style={{ textShadow: "4px 4px 0 #8b2dff" }}>
+              Radar
+            </span>
+          </h1>
+        </div>
+        <p className="max-w-sm text-lg font-light leading-snug text-zinc-400 md:text-right">
+          Your <span className="font-bold text-white">Sunday Brief</span>: what&apos;s blowing up on YouTube and exactly what to post next.
+        </p>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
+      <main className="mx-auto max-w-6xl space-y-8 px-4 pb-16 pt-6 sm:px-6">
         {/* Control bar */}
-        <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <section className="space-y-4 rounded-2xl border-2 border-[#8b2dff] bg-black/80 p-4 shadow-[6px_6px_0_#39ff14] backdrop-blur sm:p-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <select
               aria-label="Region"
               value={regionCode}
               onChange={(e) => setRegionCode(e.target.value)}
-              className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="h-12 rounded-xl border-2 border-zinc-700 bg-zinc-950 px-3 font-display text-xs font-bold uppercase tracking-wide text-white focus:border-[#39ff14] focus:outline-none"
             >
               {REGIONS.map((r) => (
                 <option key={r.code} value={r.code}>
@@ -115,14 +134,14 @@ export default function Home() {
             </select>
 
             <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-[#39ff14]" />
               <input
                 type="text"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && !loading && generate()}
-                placeholder="Search a custom topic, e.g. Cursor IDE"
-                className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Search a topic, e.g. Cursor IDE"
+                className="h-12 w-full rounded-xl border-2 border-zinc-700 bg-zinc-950 pl-10 pr-3 text-base font-light text-white placeholder:text-zinc-500 focus:border-[#39ff14] focus:outline-none"
               />
             </div>
 
@@ -130,15 +149,15 @@ export default function Home() {
               type="button"
               onClick={generate}
               disabled={loading}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border-2 border-black bg-[#39ff14] px-5 font-display text-xs font-black uppercase tracking-wider text-black shadow-[4px_4px_0_#8b2dff] transition hover:-translate-y-0.5 hover:shadow-[6px_6px_0_#8b2dff] active:translate-y-0.5 active:shadow-[2px_2px_0_#8b2dff] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading ? <Loader2 className="size-4 animate-spin" /> : <Sparkles className="size-4" />}
-              {loading ? "Generating…" : "Generate Sunday Brief"}
+              {loading ? "Cooking…" : "Generate Sunday Brief"}
             </button>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Quick picks</span>
+            <span className="font-display text-[10px] font-bold uppercase tracking-widest text-zinc-500">Quick picks</span>
             {PRESETS.map((p) => {
               const active = query.trim().toLowerCase() === p.query.toLowerCase();
               return (
@@ -147,10 +166,10 @@ export default function Home() {
                   type="button"
                   onClick={() => setQuery(p.query)}
                   className={
-                    "rounded-full border px-3 py-1 text-sm transition " +
+                    "rounded-full border-2 px-3.5 py-1 text-sm font-medium transition " +
                     (active
-                      ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100")
+                      ? "border-[#39ff14] bg-[#39ff14] text-black"
+                      : "border-zinc-600 text-zinc-200 hover:border-[#a64dff] hover:text-[#c9a0ff]")
                   }
                 >
                   {p.label}
@@ -162,42 +181,51 @@ export default function Home() {
 
         {/* Banners */}
         {isMock && brief && (
-          <div role="status" className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <div role="status" className="flex items-start gap-3 rounded-xl border-2 border-amber-400 bg-amber-400/10 p-3 text-sm font-medium text-amber-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>Running on fallback/sample dataset</span>
           </div>
         )}
         {error && (
-          <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">
+          <div role="alert" className="flex items-start gap-3 rounded-xl border-2 border-red-500 bg-red-500/10 p-3 text-sm font-medium text-red-200">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
             <span>Couldn&apos;t generate the brief: {error}</span>
           </div>
         )}
 
         {!brief && !loading && !error && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
-            <Clapperboard className="mx-auto mb-3 size-8 text-slate-400" />
-            Pick a region and topic, then press <strong>Generate Sunday Brief</strong>.
+          <div className="rounded-2xl border-2 border-dashed border-zinc-700 bg-black/50 p-12 text-center">
+            <Clapperboard className="mx-auto mb-3 size-10 text-[#a64dff]" />
+            <p className="font-display text-lg font-black uppercase text-white">Nothing cooking yet</p>
+            <p className="mt-1 font-light text-zinc-400">
+              Pick a region and topic, then hit <span className="font-bold text-[#39ff14]">Generate Sunday Brief</span>.
+            </p>
           </div>
         )}
 
         {loading && !brief && (
-          <div className="flex items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white p-12 text-slate-600">
-            <Loader2 className="size-5 animate-spin" /> Analysing trending videos…
+          <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-zinc-700 bg-black/50 p-12 font-display text-sm font-bold uppercase tracking-wide text-[#39ff14]">
+            <Loader2 className="size-5 animate-spin" /> Scanning the algorithm…
           </div>
         )}
 
         {brief && (
-          <div className={"space-y-6 transition-opacity " + (loading ? "opacity-60" : "")}>
+          <div className={"space-y-8 transition-opacity " + (loading ? "opacity-60" : "")}>
             {/* Executive summary */}
-            <section className="rounded-xl bg-gradient-to-br from-indigo-600 to-violet-700 p-6 text-white shadow-sm">
-              <h2 className="mb-2 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-indigo-100">
-                <Lightbulb className="size-4" /> Executive Summary
+            <section className="relative overflow-hidden rounded-3xl border-2 border-black bg-gradient-to-br from-[#8b2dff] via-[#6a1fd0] to-[#2a0a5e] p-6 shadow-[8px_8px_0_#d6d9e4] sm:p-8">
+              <h2 className="mb-3 inline-flex items-center gap-2 rounded-full bg-black px-3 py-1 font-display text-[11px] font-black uppercase tracking-widest text-[#39ff14]">
+                <Lightbulb className="size-3.5" /> The Tea
               </h2>
-              <p className="text-lg leading-relaxed sm:text-xl">{brief.executiveSummary}</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {brief.winningFormats.map((f) => (
-                  <span key={f} className="rounded-full bg-white/20 px-3 py-1 text-sm font-medium backdrop-blur">
+              <p className="text-xl font-light leading-relaxed text-white sm:text-2xl">{brief.executiveSummary}</p>
+              <div className="mt-5 flex flex-wrap gap-2.5">
+                {brief.winningFormats.map((f, i) => (
+                  <span
+                    key={f}
+                    className={
+                      "rounded-full border-2 border-black bg-[#39ff14] px-3.5 py-1 font-display text-[11px] font-bold uppercase tracking-wide text-black shadow-[2px_2px_0_#000] " +
+                      (i % 2 ? "rotate-1" : "-rotate-1")
+                    }
+                  >
                     {f}
                   </span>
                 ))}
@@ -206,27 +234,36 @@ export default function Home() {
 
             {/* KPI cards */}
             <section className="grid gap-4 sm:grid-cols-3">
-              <Kpi icon={<Clock className="size-5" />} label="Peak Duration" value={brief.durationSweetSpot} />
-              <Kpi icon={<Flame className="size-5" />} label="Top Emerging Cluster" value={topCluster?.clusterName ?? "—"} />
-              <Kpi icon={<Video className="size-5" />} label="Total Videos Analyzed" value={String(videoCount)} />
+              <Kpi tone="green" icon={<Clock className="size-5" />} label="Peak Duration" value={brief.durationSweetSpot} small />
+              <Kpi tone="purple" icon={<Flame className="size-5" />} label="Top Emerging Cluster" value={topCluster?.clusterName ?? "—"} small />
+              <Kpi tone="chrome" icon={<Video className="size-5" />} label="Videos Analyzed" value={String(videoCount)} />
             </section>
 
             {/* Chart */}
-            <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
-              <h2 className="mb-4 text-base font-semibold">Video count by theme cluster</h2>
+            <section className="rounded-3xl border-2 border-zinc-700 bg-black/70 p-4 shadow-[6px_6px_0_#8b2dff] sm:p-6">
+              <h2 className="mb-4 font-display text-lg font-black uppercase tracking-tight">
+                <span className="chrome-text">Who&apos;s winning</span>{" "}
+                <span className="font-light text-zinc-400">/ videos per cluster</span>
+              </h2>
               <div className="h-72 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={brief.themeClusters} margin={{ top: 8, right: 8, left: -16, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#2a2a35" />
                     <XAxis
                       dataKey="clusterName"
-                      tick={{ fontSize: 12, fill: "#475569" }}
+                      tick={{ fontSize: 12, fill: "#a1a1aa" }}
+                      stroke="#3f3f46"
                       interval={0}
                       tickFormatter={(v: string) => (v.length > 18 ? `${v.slice(0, 17)}…` : v)}
                     />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#475569" }} />
-                    <Tooltip cursor={{ fill: "#f1f5f9" }} />
-                    <Bar dataKey="videoCount" name="Videos" radius={[6, 6, 0, 0]}>
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: "#a1a1aa" }} stroke="#3f3f46" />
+                    <Tooltip
+                      cursor={{ fill: "rgba(166,77,255,0.15)" }}
+                      contentStyle={{ background: "#000", border: "2px solid #39ff14", borderRadius: 12, color: "#fff" }}
+                      labelStyle={{ color: "#39ff14", fontWeight: 700 }}
+                      itemStyle={{ color: "#fff" }}
+                    />
+                    <Bar dataKey="videoCount" name="Videos" radius={[8, 8, 0, 0]}>
                       {brief.themeClusters.map((c, i) => (
                         <Cell key={c.clusterName} fill={BAR_COLORS[i % BAR_COLORS.length]} />
                       ))}
@@ -237,31 +274,39 @@ export default function Home() {
             </section>
 
             {/* Cluster cards */}
-            <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {brief.themeClusters.map((c) => (
-                <article key={c.clusterName} className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {brief.themeClusters.map((c, i) => (
+                <article
+                  key={c.clusterName}
+                  className={
+                    "flex flex-col gap-4 rounded-2xl border-2 bg-zinc-950 p-5 transition hover:-translate-y-1 hover:rotate-0 " +
+                    (i % 2 ? "rotate-[0.4deg] border-[#a64dff]" : "-rotate-[0.4deg] border-zinc-500")
+                  }
+                >
                   <div className="flex items-start justify-between gap-3">
-                    <h3 className="font-semibold leading-snug">{c.clusterName}</h3>
-                    <span className="shrink-0 rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+                    <h3 className="font-display text-base font-black uppercase leading-tight tracking-tight text-white">
+                      {c.clusterName}
+                    </h3>
+                    <span className="shrink-0 rounded-full bg-[#8b2dff] px-2.5 py-1 font-display text-[10px] font-bold uppercase text-white">
                       {c.videoCount} {c.videoCount === 1 ? "video" : "videos"}
                     </span>
                   </div>
 
                   <div>
-                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Why it&apos;s trending</h4>
-                    <p className="text-sm leading-relaxed text-slate-700">{c.whyItIsTrending}</p>
+                    <h4 className="mb-1 font-display text-[10px] font-bold uppercase tracking-widest text-[#a64dff]">Why it&apos;s trending</h4>
+                    <p className="font-light leading-relaxed text-zinc-300">{c.whyItIsTrending}</p>
                   </div>
 
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                      <Lightbulb className="size-3.5" /> Pitch
+                  <div className="rounded-xl border-2 border-black bg-[#39ff14] p-3.5 text-black shadow-[4px_4px_0_#8b2dff]">
+                    <h4 className="mb-1 flex items-center gap-1.5 font-display text-[10px] font-black uppercase tracking-widest">
+                      <Lightbulb className="size-3.5" /> The Pitch
                     </h4>
-                    <p className="text-sm font-semibold text-slate-900">{c.suggestedVideoTitle}</p>
-                    <p className="mt-1 text-sm text-slate-700">{c.angleOrHook}</p>
+                    <p className="font-display text-sm font-bold leading-snug">{c.suggestedVideoTitle}</p>
+                    <p className="mt-1.5 text-sm font-normal leading-snug">{c.angleOrHook}</p>
                   </div>
 
                   <div className="mt-auto">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700">
+                    <span className="chrome-bg inline-flex items-center gap-1.5 rounded-full px-3 py-1 font-display text-[10px] font-bold uppercase tracking-wide text-black">
                       <Clock className="size-3.5" /> {c.recommendedDuration}
                     </span>
                   </div>
@@ -275,14 +320,38 @@ export default function Home() {
   );
 }
 
-function Kpi({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+const KPI_TONES = {
+  green: "bg-[#39ff14] text-black shadow-[5px_5px_0_#8b2dff]",
+  purple: "bg-[#8b2dff] text-white shadow-[5px_5px_0_#39ff14]",
+  chrome: "chrome-bg text-black shadow-[5px_5px_0_#8b2dff]",
+} as const;
+
+function Kpi({
+  icon,
+  label,
+  value,
+  tone,
+  small,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  tone: keyof typeof KPI_TONES;
+  small?: boolean;
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="mb-2 flex items-center gap-2 text-sm text-slate-500">
-        <span className="text-indigo-600">{icon}</span>
+    <div className={"rounded-2xl border-2 border-black p-4 " + KPI_TONES[tone]}>
+      <div className="mb-2 flex items-center gap-2 font-display text-[10px] font-bold uppercase tracking-widest opacity-80">
+        {icon}
         {label}
       </div>
-      <p className="text-lg font-semibold leading-snug">{value}</p>
+      <p
+        className={
+          "font-display font-black leading-tight tracking-tight " + (small ? "text-lg" : "text-5xl")
+        }
+      >
+        {value}
+      </p>
     </div>
   );
 }
